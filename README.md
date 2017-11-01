@@ -65,7 +65,9 @@ Ensure that the cURL and the mbstring extensions are available and a valid timez
 
 
 ### Feedback, license, support ###
-You are welcome to send me feedback via email (Gregor [at] der-meyer.de) or visit my personal blog at http://spackmat.de/spackblog (in German)
+Feedback to original author via email (Gregor [at] der-meyer.de) or visit his personal blog at http://spackmat.de/spackblog (in German)
+
+Please report any issues or feedback via the Github Issue system in this repro.
 
 The whole work is licensed under a Creative Commons cc-by-sa license (http://creativecommons.org/licenses/by-sa/3.0/de/). You are free to use and modify it, even for commercial use. If you redistribute it, you have to ensure my name is kept in the code and you use the same conditions.
 
