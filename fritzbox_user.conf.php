@@ -38,3 +38,5 @@ $this->config->setItem('requests', false); // outputs http requests to the log i
 
 # set the path for the call list for the foncalls module
 $this->config->setItem('foncallslist_path', __DIR__ . '\foncallsdaten.csv');
+
+$this->config->setItem('server', '');

@@ -481,20 +481,252 @@ class fritzbox_api {
         $ret=-1;
         if ($mode == 0 || $mode == 1)
         {
-            $formfields = array(
-            'getpage' => '/fon_devices/tam_list.lua',
-            'useajax' => '1',
-            'TamNr' => $tam,
-            'switch' => 'toggle' 
-            );
-            $output = $this->doGetRequest($formfields);
-            $output_o = json_decode($output);
-            if ( isset($output_o->switch_on))
+            // Check if corresponding tam is existing and if status has to be changed
+            $tamlist=$this->getTamStatus();
+            if ($tamlist)
             {
-                $ret=$output_o->switch_on;
-            }            
+                if($tamlist[$tam]!=$mode){
+                    $formfields = array(
+                        'getpage' => '/fon_devices/tam_list.lua',
+                        'useajax' => '1',
+                        'TamNr' => $tam,
+                        'switch' => 'toggle'
+                    );
+                    $output = $this->doGetRequest($formfields);
+                    $output_o = json_decode($output);
+                    if ( isset($output_o->switch_on))
+                    {
+                        $ret=$output_o->switch_on;
+                    }
+                }
+            }
         }
         return $ret;
+    }
+
+    /**
+     * delete port sharing
+     *
+     * @param  int  $device          device id for setting the port sharing
+     * @param  int  $portsharing_no  port sharing to delete
+     * @return false, if erroroccurs, otherwise the devicelist with all remaining port sharings
+     */
+
+    public function deletePortsharing($devicename, $portsharing)
+    {
+        $deviceNo = -1;
+        $portRule = -1;
+        $curr= $this->getPortOverview();
+        foreach($curr->data->devices as $key=>$device)
+        {
+            if (strtolower($devicename) == strtolower($device->devicename)) {
+                $deviceNo = $key;
+                break;
+            }
+        }
+        if ($deviceNo != -1)
+        {
+            foreach($curr->data->devices[$deviceNo]->rules as $key=>$rule)
+            {
+                if ($portsharing == intval($rule->port)) {
+                    $portRule = $key;
+                    break;
+                }
+            }
+            if ($portRule != -1)
+            {
+                // apply rule
+                $rule = "UID=".$curr->data->devices[$deviceNo]->rules[$portRule]->UID.";";
+                $rule .="accesstype=ipv4;";
+                $rule .="app=".$curr->data->devices[$deviceNo]->rules[$portRule]->app.";";
+                $rule .="description=".$curr->data->devices[$deviceNo]->rules[$portRule]->app.";";
+                $rule .="directory=;";
+                $rule .="activated=true;";
+                $rule .="fwport=".$curr->data->devices[$deviceNo]->rules[$portRule]->fwport.";";
+                $rule .="fwendport=".$curr->data->devices[$deviceNo]->rules[$portRule]->fwendport.";";
+                $rule .="port=".$curr->data->devices[$deviceNo]->rules[$portRule]->endport.";";
+                $rule .="myfritz_adr=;";
+                $rule .="scheme=;";
+                $rule .="protocol=TCP;";
+                $rule .="rulestate=delete;";
+                $rule .="type=port;";
+                $rule .="myfritzdevice_uid=;";
+                $rule .="myfritzservice_uid=;";
+
+                $formfields = array(
+                    'getpage' => '/data.lua',
+                    'xhr'=> 1,
+                    'allow_pcp_and_upnp'=> 0,
+                    'exposed_ipv4'=>'off',
+                    'rulecount'=>$portRule,
+                    'rule1'=> $rule,
+                    'ipv4expostedhost_count'=>0,
+                    'exposed_ipv4_node'=>"",
+                    'device'=>$curr->data->devices[$deviceNo]->UID,
+                    'local_ipv4'=>$curr->data->devices[$deviceNo]->local_ipv4,
+                    'landevice'=>$curr->data->devices[$deviceNo]->UID,
+                    'ipv6_rulenode'=>"",
+                    'isIpv6Activ'=>"",
+                    'ifaceid'=>':::::',
+                    'edify'=>"",
+                    'lang' => 'de',
+                    'page'=>'portoverview',
+                );
+                $this->doPostForm($formfields);
+                return True;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * set port sharing
+     *
+     * @param  int  $device          device id for setting the port sharing
+     * @param  int  $externalport    external port for port sharing
+     * @param  int  $startPort       interal start port of port sharing range
+     * @param  int  $endPort         interal end port of port sharing range
+     * @return false, if erroroccurs, otherwise the devicelist with all port sharings
+     */
+    public function setPortsharing($devicename, $externalPort, $startPort, $endPort)
+    {
+        $curr = $this->getPortOverview();
+        foreach ($curr->data->devices as $key => $device) {
+            if (strtolower($devicename) == strtolower($device->devicename)) {
+                $deviceNo = $key;
+                break;
+            }
+        }
+        if ($deviceNo != -1) {
+            $rulecount = sizeof($curr->data->devices[$deviceNo]->rules);
+            $UID = $curr->data->devices[$deviceNo]->UID;
+            $local_ip4 = $curr->data->devices[$deviceNo]->local_ipv4;
+        } else {
+            return false;
+        }
+
+        // generate rule
+        $formfields = array(
+            'getpage' => '/data.lua',
+            'xhr' => 1,
+            'sharingtype' => 'port',
+            'description_portsharing' => 'HTTP-Server',
+            'start_portsharing' => $startPort,
+            'end_portsharing' => $endPort,
+            'port_portsharing' => $externalPort,
+            'portsharing_activ' => 1,
+            'portsharingtype' => 'ipv4',
+            'allow_pcp_and_upnp' => 0,
+            'exposed_ipv4' => 'off',
+            'apply_rule' => "",
+            'page' => 'portoverview',
+            'lang' => 'de'
+        );
+        $output = $this->doPostForm($formfields);
+        $output = json_decode($output);
+        if ($output->data->apply_rule != "ok") {
+            return false;
+        }
+
+        // apply rule
+        $rule = "UID=newRule1;";
+        $rule .= "accesstype=ipv4;";
+        $rule .= "app=HTTP-Server;";
+        $rule .= "description=HTTP-Server;";
+        $rule .= "directory=;";
+        $rule .= "activated=1;";
+        $rule .= "fwport=" . $startPort . ";";
+        $rule .= "fwendport=" . $endPort . ";";
+        $rule .= "port=" . $externalPort . ";";
+        $rule .= "myfritz_adr=;";
+        $rule .= "scheme=undefined;";
+        $rule .= "protocol=TCP;";
+        $rule .= "rulestate=new;";
+        $rule .= "type=port;";
+        $rule .= "myfritzdevice_uid=;";
+        $rule .= "myfritzservice_uid=undefined;";
+
+        $formfields = array(
+            'getpage' => '/data.lua',
+            'xhr' => 1,
+            'allow_pcp_and_upnp' => 0,
+            'exposed_ipv4' => 'off',
+            "rulecount" => $rulecount,
+            "rule1" => $rule,
+            "ipv4exposedhost_count" => 0,
+            "exposed_ipv4_node" => "",
+            "device" => $UID,
+            "local_ipv4" => $local_ip4,
+            "landevice" => $UID,
+            "ipv6_rulenode" => "",
+            "isIpv6Active" => "false",
+            "ifaceid" => ":::::",
+            "edify" => "",
+            'page' => 'portoverview',
+            'lang' => 'de'
+        );
+        $output2 = $this->doPostForm($formfields);
+        $decoded_Output = json_decode($output2);
+        if (sizeof($decoded_Output->data->devices[$deviceNo]->rules) == ($rulecount + 1)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+    * get tam status
+    * 
+    * @return NULL if no tams are present, otherwise array with 1 for activated tam, 0 for deactivated tam
+    */
+    
+    public function getTamStatus()
+    {
+        $formfields = array(
+            'getpage' => '/data.lua',
+            'page' => 'tam',
+            'lang' => 'de',
+            'xhr' =>'1'
+        );
+        $ret=NULL;
+        $output = $this->doPostForm($formfields);
+        preg_match_all('/id="uiSwitch([0-9])" class="switch_(off|on) /', $output, $status);
+        foreach($status[2] as $value )
+        {
+            $ret[]= ($value=='on'? 1:0);
+        }
+        return $ret;
+    }
+
+    /**
+     * get DSL Spectrum
+     *
+     * @return array    Array of Spectrum values
+     */
+
+    public function getDSLSpectrum()
+    {
+        $formfields = array(
+            'getpage' => '/internet/dsl_spectrum.lua',
+            'useajax' => '1'
+        );
+        $output = $this->doGetRequest($formfields);
+        return json_decode($output);
+    }
+
+    /**
+     * get DSL Statistics (CRC errors, resync?, and signal to noise ratio (snr)
+     *
+     * @return array    Array of statistic values
+     */
+
+    public function getDSLStats()
+    {
+        $formfields = array(
+            'getpage' => '/internet/dsl_stats_graph.lua',
+            'useajax' => '1'
+        );
+        $output = $this->doGetRequest($formfields);
+        return json_decode($output);
     }
     
     /**
@@ -524,6 +756,29 @@ class fritzbox_api {
     }
 
     /**
+     * get Logbook from Fritz!Box
+     *
+     * @return array    with max 400 entries, every entry has 6 lines with date, time, logtext, log code,
+     *                  priority and link to helppage
+     */
+
+    public function getLogbook()
+    {
+        $formfields = array(
+            'getpage' => '/data.lua',
+            'page' => 'log',
+            'lang' => 'de',
+            'xhrid' =>'all',
+            'xhr' => '1'
+        );
+
+        $output = $this->doPostForm($formfields);
+        $out=json_decode($output);
+        return $out->data->log;
+    }
+
+
+    /**
     * getOverview 
     * 
     * @return array     array of all data from startpage
@@ -536,7 +791,28 @@ class fritzbox_api {
             'page' => 'overview',
             'lang' => 'de',
             'xhr' =>'1',
-            'xhr' =>'all'
+            'xhrID' =>'all'
+        );
+
+        $output = $this->doPostForm($formfields);
+        return json_decode($output);
+    }
+
+
+    /**
+     * getOverview
+     *
+     * @return array     array of all data from startpage
+     */
+
+    public function getPortOverview()
+    {
+        $formfields = array(
+            'getpage' => '/data.lua',
+            'page' => 'portoverview',
+            'lang' => 'de',
+            'xhr' =>'1',
+            'xhrID' =>'all'
         );
 
         $output = $this->doPostForm($formfields);
